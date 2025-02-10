@@ -3,83 +3,84 @@ import json
 import argparse
 import sys
 
-# Función para mostrar la wiki de comandos
+# Function to display the command wiki
 def show_help():
     help_text = """
-    --- Wiki de Comandos ---
+    --- Command Wiki ---
 
-    - **Dominio**: El argumento principal debe ser un dominio que deseas consultar. 
-      Ejemplo:
+    - **Domain**: The main argument should be a domain you want to query. 
+      Example:
       python script.py example.com
-      Este comando consulta la base de datos crt.sh para obtener los certificados asociados al dominio.
+      This command queries the crt.sh database to get certificates associated with the domain.
       
-    - **--subdomains**: Muestra solo los subdominios del dominio especificado.
-      Ejemplo:
+    - **--subdomains**: Displays only the subdomains of the specified domain.
+      Example:
       python script.py example.com --subdomains
-      Este comando filtra los resultados para mostrar solo los subdominios relacionados con el dominio proporcionado.
+      This command filters the results to show only the subdomains related to the provided domain.
       
-    - **--wiki**: Muestra esta wiki de comandos.
+    - **--wiki**: Displays this command wiki.
     
-    --- Ejemplos ---
+    --- Examples ---
     
-    Para consultar un dominio y ver los certificados:
+    To query a domain and view the certificates:
     python script.py example.com
 
-    Para consultar solo los subdominios de un dominio:
+    To query only the subdomains of a domain:
     python script.py example.com --subdomains
     """
     print(help_text)
     sys.exit(0)
 
-# Configurar el parser de argumentos
-parser = argparse.ArgumentParser(description='Consulta crt.sh para un dominio y procesa los resultados.')
-parser.add_argument('domain', nargs='?', type=str, help='El dominio que deseas consultar (por ejemplo, example.com)')
-parser.add_argument('--subdomains', action='store_true', help='Solo muestra los subdominios encontrados.')
-parser.add_argument('--wiki', action='store_true', help='Muestra una wiki de los comandos')
+# Set up the argument parser
+parser = argparse.ArgumentParser(description='Query crt.sh for a domain and process the results.')
+parser.add_argument('domain', nargs='?', type=str, help='The domain you want to query (e.g., example.com)')
+parser.add_argument('--subdomains', action='store_true', help='Only display the found subdomains.')
+parser.add_argument('--wiki', action='store_true', help='Displays a wiki of the commands')
 
-# Parsear los argumentos
+# Parse the arguments
 args = parser.parse_args()
 
-# Si se pasa el argumento --wiki, muestra la wiki
+# If the --wiki argument is passed, show the wiki
 if args.wiki:
     show_help()
 
-# Si no se pasa el dominio, mostrar un error de uso
+# If no domain is passed, show a usage error
 if not args.domain:
-    print("Por favor, proporciona un dominio. Usa --wiki para ver las opciones.")
+    print("Please provide a domain. Use --wiki to see the options.")
     sys.exit(1)
 
-# Obtener el dominio desde los argumentos
+# Get the domain from the arguments
 domain = args.domain
 
-# Hacer la solicitud GET a crt.sh
+# Make the GET request to crt.sh
 url = f'https://crt.sh/?q={domain}&output=json'
 response = requests.get(url)
 
-# Si la solicitud fue exitosa
+# If the request was successful
 if response.status_code == 200:
-    # Convertir la respuesta JSON
+    # Convert the JSON response
     data = response.json()
     
-    # Extraer todos los valores de "name" de cada entrada
+    # Extract all the "name" values from each entry
     names = []
     for entry in data:
         name = entry.get('name_value', '')
         if name and "CN=" not in name:
             names.append(name.strip('"'))
     
-    # Eliminar duplicados y ordenar los resultados
+    # Remove duplicates and sort the results
     unique_names = sorted(set(names))
 
-    # Si se pasó --subdomains, filtrar solo los subdominios
+    # If --subdomains was passed, filter only the subdomains
     if args.subdomains:
         subdomains = [name for name in unique_names if domain in name and name != domain]
-        # Imprimir solo los subdominios
+        # Print only the subdomains
         for subdomain in subdomains:
             print(subdomain)
     else:
-        # Mostrar el JSON completo como si fuera un `curl` con `jq`
+        # Display the full JSON as if using `curl` with `jq`
         print(json.dumps(data, indent=2))
 
 else:
-    print(f"Error al hacer la solicitud: {response.status_code}")
+    print(f"Error making the request: {response.status_code}")
+
