@@ -25,10 +25,10 @@ def show_help():
       python script.py example.com --subdomains --show-ips
       This command shows the subdomains and their corresponding IP addresses.
       
-    - **--save**: Saves the results of the query into a file named `scan.txt` in the current directory.
+    - **--save**: Saves the results of the query into a file specified by the user.
       Example:
-      python script.py example.com --save
-      This command saves the results of the domain query in a text file.
+      python script.py example.com --save myfile.txt
+      This command saves the results of the domain query in the file specified.
 
     - **--wiki**: Displays this command wiki.
     
@@ -43,11 +43,11 @@ def show_help():
     To show subdomains and their IP addresses:
     python script.py example.com --subdomains --show-ips
 
-    To save the results to a file:
-    python script.py example.com --save
+    To save the results to a specific file:
+    python script.py example.com --save myfile.txt
 
     To save the results and display only subdomains:
-    python script.py example.com --subdomains --save
+    python script.py example.com --subdomains --save myfile.txt
     """
     print(help_text)
     sys.exit(0)
@@ -57,7 +57,7 @@ parser = argparse.ArgumentParser(description='Query crt.sh for a domain and proc
 parser.add_argument('domain', nargs='?', type=str, help='The domain you want to query (e.g., example.com)')
 parser.add_argument('--subdomains', action='store_true', help='Only display the found subdomains.')
 parser.add_argument('--show-ips', action='store_true', help='Show the IP addresses of subdomains.')
-parser.add_argument('--save', action='store_true', help='Save the results to a file named scan.txt.')
+parser.add_argument('--save', type=str, help='Save the results to a file (default is scan.txt).')
 parser.add_argument('--wiki', action='store_true', help='Displays a wiki of the commands')
 
 # Parse the arguments
@@ -116,14 +116,15 @@ if response.status_code == 200:
         # Display the full JSON response
         print(json.dumps(data, indent=2))
 
-    # If --save was passed, save the results to scan.txt
+    # If --save was passed, save the results to the file specified by the user
     if args.save:
-        with open('scan.txt', 'w') as file:
+        file_name = args.save if args.save else 'scan.txt'  # Default to 'scan.txt' if no filename is given
+        with open(file_name, 'w') as file:
             if subdomains:
                 for subdomain in subdomains:
                     file.write(f"{subdomain}\n")
             else:
                 file.write(json.dumps(data, indent=2))
-        print("Results saved to scan.txt")
+        print(f"Results saved to {file_name}")
 else:
     print(f"Error making the request: {response.status_code}")
