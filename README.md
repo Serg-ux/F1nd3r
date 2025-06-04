@@ -2,6 +2,12 @@
 ## Overview
 This Python script queries the crt.sh database for SSL certificate information related to a given domain. 
 
+## Install requeriments
+To use this script you have to install the requeriments
+```bash
+pip install -r requirements.txt
+```
+
 ## Script Usage
 
 ###  Run the Script with a Domain
