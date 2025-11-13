@@ -1,130 +1,169 @@
-import requests
-import json
+i#!/usr/bin/env python3
+"""
+crt.sh Domain Lookup Tool
+─────────────────────────
+Query SSL certificate transparency logs for domains, extract subdomains,
+resolve IPs, and save results — with beautiful colored output ✨
+"""
+
 import argparse
-import sys
+import json
 import socket
-import os
+import sys
+import requests
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich import box
+from rich.syntax import Syntax
 
-# Function to display the command wiki
+console = Console()
+
+
 def show_help():
+    """Displays a colorful command wiki."""
     help_text = """
-    --- Command Wiki ---
+[bold cyan]📘 Command Wiki[/bold cyan]
 
-    - **Domain**: The main argument should be a domain you want to query. 
-      Example:
-      python script.py example.com
-      This command queries the crt.sh database to get certificates associated with the domain.
-      
-    - **--subdomains**: Displays only the subdomains of the specified domain.
-      Example:
-      python script.py example.com --subdomains
-      This command filters the results to show only the subdomains related to the provided domain.
-      
-    - **--show-ips**: Shows the IP addresses of subdomains for the specified domain.
-      Example:
-      python script.py example.com --subdomains --show-ips
-      This command shows the subdomains and their corresponding IP addresses.
-      
-    - **--save**: Saves the results of the query into a file specified by the user.
-      Example:
-      python script.py example.com --save myfile.txt
-      This command saves the results of the domain query in the file specified.
+[bold yellow]Domain:[/bold yellow]
+  The main argument should be the domain you want to query.
+  Example:
+    [green]python crtsh_lookup.py example.com[/green]
 
-    - **--wiki**: Displays this command wiki.
-    
-    --- Examples ---
-    
-    To query a domain and view the certificates:
-    python script.py example.com
+[bold yellow]--subdomains[/bold yellow]:
+  Show only the subdomains related to the domain.
+  Example:
+    [green]python crtsh_lookup.py example.com --subdomains[/green]
 
-    To query only the subdomains of a domain:
-    python script.py example.com --subdomains
+[bold yellow]--show-ips[/bold yellow]:
+  Show IP addresses for each subdomain.
+  Example:
+    [green]python crtsh_lookup.py example.com --subdomains --show-ips[/green]
 
-    To show subdomains and their IP addresses:
-    python script.py example.com --subdomains --show-ips
+[bold yellow]--save[/bold yellow]:
+  Save results to a file.
+  Example:
+    [green]python crtsh_lookup.py example.com --save results.txt[/green]
 
-    To save the results to a specific file:
-    python script.py example.com --save myfile.txt
+[bold yellow]--wiki[/bold yellow]:
+  Show this wiki page.
 
-    To save the results and display only subdomains:
-    python script.py example.com --subdomains --save myfile.txt
+──────────────────────────────
+Examples:
+  [green]python crtsh_lookup.py example.com[/green]
+  [green]python crtsh_lookup.py example.com --subdomains[/green]
+  [green]python crtsh_lookup.py example.com --subdomains --show-ips[/green]
+  [green]python crtsh_lookup.py example.com --save domains.txt[/green]
     """
-    print(help_text)
+    console.print(Panel(help_text, title="[bold cyan]crt.sh Helper[/bold cyan]", border_style="cyan"))
     sys.exit(0)
 
-# Set up the argument parser
-parser = argparse.ArgumentParser(description='Query crt.sh for a domain and process the results.')
-parser.add_argument('domain', nargs='?', type=str, help='The domain you want to query (e.g., example.com)')
-parser.add_argument('--subdomains', action='store_true', help='Only display the found subdomains.')
-parser.add_argument('--show-ips', action='store_true', help='Show the IP addresses of subdomains.')
-parser.add_argument('--save', type=str, help='Save the results to a file (default is scan.txt).')
-parser.add_argument('--wiki', action='store_true', help='Displays a wiki of the commands')
 
-# Parse the arguments
-args = parser.parse_args()
+def fetch_crtsh_data(domain):
+    """Fetch data from crt.sh."""
+    url = f'https://crt.sh/?q={domain}&output=json'
+    try:
+        response = requests.get(url, timeout=90)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as e:
+        console.print(f"[bold red]❌ Error fetching data from crt.sh:[/bold red] {e}")
+        sys.exit(1)
 
-# If the --wiki argument is passed, show the wiki
-if args.wiki:
-    show_help()
 
-# If no domain is passed, show a usage error
-if not args.domain:
-    print("Please provide a domain. Use --wiki to see the options.")
-    sys.exit(1)
+def extract_unique_names(data):
+    """Extract unique domain names from crt.sh response."""
+    names = [
+        entry.get('name_value', '').strip('"')
+        for entry in data if 'name_value' in entry
+    ]
+    names = [n for n in names if n and "CN=" not in n]
+    return sorted(set(names))
 
-# Get the domain from the arguments
-domain = args.domain
 
-# Make the GET request to crt.sh
-url = f'https://crt.sh/?q={domain}&output=json'
-response = requests.get(url)
+def resolve_ip(subdomain):
+    """Resolve IP address for a subdomain."""
+    try:
+        return socket.gethostbyname(subdomain)
+    except socket.gaierror:
+        return "IP not found"
 
-# If the request was successful
-if response.status_code == 200:
-    # Convert the JSON response
-    data = response.json()
-    
-    # Extract all the "name" values from each entry
-    names = []
-    for entry in data:
-        name = entry.get('name_value', '')
-        if name and "CN=" not in name:
-            names.append(name.strip('"'))
-    
-    # Remove duplicates and sort the results
-    unique_names = sorted(set(names))
 
-    # If --subdomains was passed, filter only the subdomains
-    subdomains = []
-    if args.subdomains:
-        subdomains = [name for name in unique_names if domain in name and name != domain]
-        
-        # Print the subdomains and, if --show-ips is passed, show their IP addresses
-        if args.show_ips:
-            for subdomain in subdomains:
-                try:
-                    ip = socket.gethostbyname(subdomain)
-                    print(f"{subdomain} -> {ip}")
-                except socket.gaierror:
-                    print(f"{subdomain} -> IP not found")
+def save_results(filename, data):
+    """Save results to file."""
+    try:
+        with open(filename, 'w', encoding='utf-8') as f:
+            if isinstance(data, list):
+                f.write('\n'.join(data))
+            else:
+                json.dump(data, f, indent=2)
+        console.print(f"[bold green]💾 Results saved to:[/bold green] {filename}")
+    except OSError as e:
+        console.print(f"[bold red]❌ Error saving file:[/bold red] {e}")
+
+
+def display_table(subdomains, show_ips):
+    """Display subdomains (and optional IPs) in a rich table."""
+    if not subdomains:
+        console.print("[bold yellow]⚠️ No subdomains found.[/bold yellow]")
+        return
+
+    table = Table(
+        title="🌐 Discovered Subdomains",
+        box=box.ROUNDED,
+        header_style="bold magenta"
+    )
+    table.add_column("Subdomain", style="cyan", no_wrap=True)
+    if show_ips:
+        table.add_column("IP Address", style="green")
+
+    for sub in subdomains:
+        if show_ips:
+            ip = resolve_ip(sub)
+            table.add_row(sub, ip)
         else:
-            # Print only the subdomains
-            for subdomain in subdomains:
-                print(subdomain)
+            table.add_row(sub)
+
+    console.print(table)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Query crt.sh for SSL certificate data of a domain.")
+    parser.add_argument('domain', nargs='?', type=str, help='Domain to query (e.g., example.com)')
+    parser.add_argument('--subdomains', action='store_true', help='Show only discovered subdomains.')
+    parser.add_argument('--show-ips', action='store_true', help='Show IP addresses for subdomains.')
+    parser.add_argument('--save', type=str, help='Save results to file.')
+    parser.add_argument('--wiki', action='store_true', help='Display command wiki.')
+
+    args = parser.parse_args()
+
+    if args.wiki:
+        show_help()
+
+    if not args.domain:
+        console.print("[bold red]❌ Error:[/bold red] Please provide a domain. Use [green]--wiki[/green] for help.")
+        sys.exit(1)
+
+    domain = args.domain
+
+    console.print(Panel.fit(f"🔍 Querying [bold cyan]{domain}[/bold cyan] on crt.sh...", border_style="blue"))
+    data = fetch_crtsh_data(domain)
+    unique_names = extract_unique_names(data)
+
+    if args.subdomains:
+        subdomains = [n for n in unique_names if domain in n and n != domain]
+        display_table(subdomains, args.show_ips)
+
+        if args.save:
+            save_results(args.save, subdomains)
 
     else:
-        # Display the full JSON response
-        print(json.dumps(data, indent=2))
+        syntax = Syntax(json.dumps(data, indent=2), "json", theme="monokai", line_numbers=True)
+        console.print(Panel(syntax, title=f"📜 crt.sh Results for {domain}", border_style="green"))
 
-    # If --save was passed, save the results to the file specified by the user
-    if args.save:
-        file_name = args.save if args.save else 'scan.txt'  # Default to 'scan.txt' if no filename is given
-        with open(file_name, 'w') as file:
-            if subdomains:
-                for subdomain in subdomains:
-                    file.write(f"{subdomain}\n")
-            else:
-                file.write(json.dumps(data, indent=2))
-        print(f"Results saved to {file_name}")
-else:
-    print(f"Error making the request: {response.status_code}")
+        if args.save:
+            save_results(args.save, data)
+
+
+if __name__ == '__main__':
+    main()
